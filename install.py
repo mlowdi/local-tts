@@ -20,7 +20,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener, urlopen
 
 
-COMMANDS = ("local-say", "local-audiobook", "local-tts-server")
+COMMANDS = ("local-say", "local-audiobook", "local-tts-server", "local-announce")
 MODEL_RELEASE = (
     "https://github.com/thewh1teagle/kokoro-onnx/releases/download/"
     "model-files-v1.1"

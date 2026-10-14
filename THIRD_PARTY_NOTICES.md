@@ -62,8 +62,14 @@ components listed here; their license files remain authoritative.
   on how that particular build was configured (LGPL/GPL and external libraries).
   A build using nonfree components can have additional redistribution restrictions.
   Check the actual build and upstream legal documentation before bundling it.
-- PipeWire's `pw-play`, systemd, Python, Git, and uv are independently installed
-  tools; they are not relicensed or vendored by this repository.
+- PipeWire's `pw-play`, systemd (including `busctl`), Python, Git, and uv are
+  independently installed tools; they are not relicensed or vendored by this
+  repository.
+- The optional OMP extension runs in a separately installed OMP host. OMP and
+  its dependencies retain their own licenses and are not vendored here.
+- The announcement chime is synthesized by original code in `announce.py`,
+  covered by this repository's MIT license; no third-party sound recording is
+  bundled.
 
 ## Books and output audio
 

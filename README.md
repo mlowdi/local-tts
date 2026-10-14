@@ -1,40 +1,33 @@
 # Local TTS
 
-Local TTS is a Linux, CPU-only speech service built around
-[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M). It provides:
+Local TTS is a Linux, CPU-only speech service based on [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M). It provides:
 
-- an OpenAI-style local HTTP speech endpoint;
-- `local-say` for playback or 24 kHz mono PCM16 WAV output; and
-- `local-audiobook` for converting a DRM-free English EPUB into a chaptered
-  M4B plus individually playable M4A chapters, with safe chapter-level resume.
+- An OpenAI-style local HTTP speech endpoint.
+- `local-say` for playback or 24 kHz mono PCM16 WAV output.
+- `local-audiobook` for conversion of a DRM-free English EPUB into a chaptered M4B and individually playable M4A chapters, with chapter-level resume.
+- `local-announce` and an optional tool for the OMP coding-agent host, for brief spoken announcements with a chime and guarded media pause and resume.
 
-The service uses four CPU inference threads, keeps the model loaded while it is
-running, and needs no GPU, cloud account, or API key. After setup, synthesis and
-EPUB processing are local and require no network connection.
+The service uses four CPU inference threads and keeps the model loaded while running. It requires no GPU, cloud account, or API key. Speech generation and EPUB processing run locally. No external network connection is required after setup.
 
 ## Requirements
 
-- Linux with a user systemd session (unless installing with `--no-service`)
-- Python 3.10 or newer (`python3`) for the installer; the application uses a uv-managed Python
-  3.13 environment
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
-- FFmpeg and ffprobe for audiobook output
-- `pw-play` only if `local-say` should play through PipeWire; saving WAV files
-  does not require it
+- Linux with a user systemd session, unless installation uses `--no-service`.
+- Python 3.10 or newer (`python3`) for the installer. The application uses a uv-managed Python 3.13 environment.
+- [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- FFmpeg and ffprobe for audiobook output.
+- `pw-play` for direct speech playback and announcements. WAV file output does not require it.
+- `busctl` and access to the desktop user D-Bus session for optional announcements.
 
-Install the system packages on Fedora:
+The system packages on Fedora are:
 
 ```bash
 sudo dnf install python3 curl ffmpeg-free
 sudo dnf install pipewire-utils  # optional: provides pw-play
 ```
 
-Fedora's distro `ffmpeg-free` package is codec-limited, but current builds
-provide the native `aac` encoder used here. If using a different or older
-FFmpeg build, confirm that its encoder list contains `aac`; having an AAC
-decoder alone is not sufficient.
+Fedora's `ffmpeg-free` package has a limited codec set. Current builds provide the native `aac` encoder required for audiobook output. Other or older FFmpeg builds must include `aac` in their encoder list. An AAC decoder alone is insufficient.
 
-On Debian or Ubuntu:
+The system packages on Debian or Ubuntu are:
 
 ```bash
 sudo apt update
@@ -42,90 +35,70 @@ sudo apt install python3 curl ffmpeg
 sudo apt install pipewire-bin  # optional: provides pw-play
 ```
 
-Install uv using the [official installation
-instructions](https://docs.astral.sh/uv/getting-started/installation/). Their
-Unix installer command is:
+The [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/) describe uv setup. The Unix installer command is:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Expect roughly 0.5 GB of installed model and Python environment data, in
-addition to generated audio and temporary download space. A loaded service has
-used roughly 1 GB of RAM on one system. These are planning baselines, not
-promises: package versions, allocator behavior, input, and platform can change
-both figures. Keeping the combined M4B and its per-chapter M4A files uses about
-60 MB per finished hour at the configured bitrate.
+The model files and Python environment require approximately 0.5 GB, excluding generated audio and temporary download space. A loaded service used approximately 1 GB of RAM on one system. These figures are planning estimates. Package versions, allocator behavior, input, and platform affect disk and memory use. Retaining the combined M4B and its per-chapter M4A files requires about 60 MB per finished hour at the configured bitrate.
 
 ## Install
 
-From the repository root:
+Installation runs from the repository root:
 
 ```bash
 python3 install.py
 ```
 
-The installer:
+The installer performs these operations:
 
-1. runs `uv sync --frozen --python 3.13` against the pinned lockfile;
-2. verifies every model file against `models/SHA256SUMS`, reusing verified
-   files and atomically downloading and checking missing or invalid files;
-3. installs `local-say`, `local-audiobook`, and `local-tts-server` command
-   links; and
-4. installs, enables, and starts the `local-tts.service` user unit.
+1. Runs `uv sync --frozen --python 3.13` against the pinned lockfile.
+2. Verifies each model file against `models/SHA256SUMS`. It reuses verified files and downloads and checks missing or invalid files before atomic installation.
+3. Installs command links for `local-say`, `local-audiobook`, `local-tts-server`, and `local-announce`.
+4. Installs, enables, and starts the `local-tts.service` user unit.
 
-It refuses to replace unrelated command links or service units. Rerunning it
-for this same checkout is safe.
+The installer refuses to replace unrelated command links or service units. Repeated installation from the same checkout is safe.
 
-To prepare the environment, models, and commands without touching systemd:
+The `--no-service` option installs the environment, models, and commands without modifying systemd:
 
 ```bash
 python3 install.py --no-service
 ```
 
-Commands go to `~/.local/bin` by default. Choose another directory with:
+The default command directory is `~/.local/bin`. The `--bin-dir` option selects another directory:
 
 ```bash
 python3 install.py --bin-dir "$HOME/bin"
 ```
 
-Ensure the selected directory is on `PATH`. For the default, add this to the
-appropriate shell startup file if needed, then start a new shell:
+The command directory must be on `PATH`. For the default directory, the following line can be added to the appropriate shell startup file. A new shell loads the updated setting.
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-The installed links and service refer back to this checkout, and model assets
-remain under its `models/` directory. Keep the checkout at a stable path. If it
-must be moved, follow the Uninstall section **before moving it** to remove the
-old checkout's service and command links without deleting data. After moving,
-recreate the path-dependent virtual environment with `uv venv --clear --python 3.13`
-and rerun `python3 install.py` from the new root. The installer deliberately
-refuses to take over links or a unit owned by another checkout path.
+The command links and service refer to the checkout. Model files remain in its `models/` directory, so the checkout must stay at a stable path. Before a checkout move, the user must follow the Uninstall procedure to remove its service and command links without deleting data. After the move, `uv venv --clear --python 3.13` recreates the path-dependent virtual environment. Installation then runs with `python3 install.py` from the new repository root. The installer refuses to replace links or a unit owned by another checkout path.
 
 ### Foreground server
 
-With a `--no-service` installation, or after stopping the service, run:
+A `--no-service` installation uses the foreground server. The same command can run after the user stops the installed service:
 
 ```bash
 local-tts-server
 ```
 
-It stays in the foreground until Ctrl-C and listens on `127.0.0.1:8880`.
-Additional arguments are passed to Uvicorn; for example, a temporary alternate
-port can be selected with:
+The server runs in the foreground until Ctrl-C and listens on `127.0.0.1:8880`. Additional arguments pass to Uvicorn. For example, this command selects a temporary alternate port:
 
 ```bash
 local-tts-server --port 18880
 ```
 
-`local-say` and `local-audiobook` always use port 8880, so an alternate port is
-primarily useful for direct API testing.
+`local-say`, `local-audiobook`, and `local-announce` always use port 8880. An alternate port is primarily useful for direct API testing.
 
 ## Speak or save text
 
-The service must be running before using `local-say`.
+`local-say` requires a running service.
 
 ```bash
 local-say "Hello! This sentence is generated on this computer."
@@ -137,39 +110,85 @@ local-say --output reply.wav "Save this speech instead of playing it."
 pw-play reply.wav
 ```
 
-The default voice is `af_heart`. `--voices` reports the exact available US and
-British English voice IDs. `--speed` must be a finite value from **0.5 through
-2.0**, inclusive. Without `--output`, `local-say` uses `pw-play` and removes its
-temporary WAV afterward. With `--output`, it writes a 24 kHz, mono, PCM16 WAV.
+The default voice is `af_heart`. `--voices` lists the available US and British English voice IDs. `--speed` must be finite and between 0.5 and 2.0, inclusive. Without `--output`, `local-say` plays the audio through `pw-play` and removes its temporary WAV afterward. With `--output`, it writes a 24 kHz mono PCM16 WAV.
 
-Text is spoken literally. Plain prose generally works better than Markdown,
-source code, or markup. This project does not perform voice cloning, speech
-recognition, or automatic narration of another application's replies.
+The service speaks text literally. Plain prose generally produces better results than Markdown, source code, or markup. Local TTS does not provide voice cloning, speech recognition, or automatic narration of another application's replies.
+
+## OMP announcements (optional)
+
+The extension in `omp-extension/` adds the `announce` tool to the OMP coding-agent host. Explicit agent calls invoke the tool. The extension has no reply, completion, or automatic speech hooks. The tool description specifies sparing use for requests for user attention or completion of important work. It discourages routine progress narration. Messages must be nonempty after trimming and contain at most 300 characters.
+
+The extension requires OMP, the running local speech service, `local-announce` on OMP's `PATH`, `pw-play`, and `busctl` from systemd. OMP must run as the desktop user with access to the same PipeWire server and user D-Bus session as the media players. `playerctl` is not required. The extension was tested with OMP 18.9.1.
+
+After Local TTS installation, the following command links the extension from the repository root:
+
+```bash
+omp plugin link "$PWD/omp-extension"
+```
+
+OMP loads the linked extension after a restart. The following command loads the extension for one session without linking it:
+
+```bash
+omp -e "$PWD/omp-extension/index.ts"
+```
+
+The `announce` tool accepts a `message` field:
+
+```json
+{"message":"The conversion is complete. Would you like me to start the next book?"}
+```
+
+`local-announce` runs the same sequence directly:
+
+```bash
+local-announce "Your attention, please. The audiobook is ready."
+printf '%s\n' "I need your decision before continuing." | local-announce --json
+```
+
+The helper generates speech before pausing media. Speech generation delays or an unavailable speech server therefore do not leave a movie paused. The helper controls local media through the Media Player Remote Interfacing Specification (MPRIS). It pauses eligible playing media, plays an original four-note bell chime followed by the message, and restores eligible players during cleanup.
+
+Speech uses `af_heart` at normal speed. Announcements in the same desktop session run serially, including speech generation, playback, and restoration. The helper removes temporary audio afterward and does not change output volume.
+
+Media restoration follows these rules:
+
+- Already-paused media stays paused. A player must support control, pause, and play before the helper pauses it.
+- MPRIS status can lag a successful `Pause` or `Play` request. The helper briefly waits for status publication without repeating control commands. It retains unconfirmed pause requests and rechecks them during cleanup. A stale `Playing` reply does not discard the request. A player never observed paused is not sent `Play`.
+- Only players paused by the current invocation are eligible for resume. Their D-Bus owner, metadata, playback state, and position must still match. Position has a 1.5-second tolerance. The helper skips restoration after a track change, a seek beyond that tolerance, a stop, or a player replacement.
+- KDE Connect remote-player proxies and the `playerctld` proxy are excluded.
+- Players without usable MPRIS support cannot be paused and may overlap the announcement. Results include discovery and control failures. MPRIS cannot distinguish every user action.
+
+Ctrl-C, SIGTERM, and OMP cancellation stop playback and attempt restoration before returning. The OMP tool permits 120 seconds in total, including queue time. It then allows up to 20 seconds for cleanup before forced termination. SIGKILL, crashes, or a lost desktop session can prevent restoration. Affected media may require manual resume. Results include `paused`, `resumed`, `skipped`, and `warnings` lists. They distinguish playback success, cancellation, and errors.
+
+Announcements use PipeWire audio rather than desktop notifications. Full-screen notification suppression does not suppress the tool. A muted or unavailable audio output still prevents hearing the announcement. Speech generation runs locally. OMP's chat-model connection depends on the OMP configuration.
+
+The following command disables the optional tool. The change takes effect after an OMP restart.
+
+```bash
+omp plugin disable omp-local-announce
+```
 
 ## EPUB audiobooks
 
-First inspect the sections that the EPUB declares in linear reading order:
+The `--list-chapters` option lists readable sections from the EPUB spine, which defines the book's reading order:
 
 ```bash
 local-audiobook /path/to/book.epub --list-chapters
 ```
 
-Convert the complete book (the value of `--output` is a directory, not a file):
+The following command converts the complete book. The `--output` value is a directory, not a file.
 
 ```bash
 local-audiobook /path/to/book.epub --output /path/to/My-Audiobook
 ```
 
-Select sections and narration settings:
+The `--chapters`, `--voice`, and `--speed` options select sections and narration settings:
 
 ```bash
 local-audiobook /path/to/book.epub --chapters 2-4,7 \
   --voice bm_george --speed 0.95 --output /path/to/My-Audiobook-preview
 ```
 
-Audiobooks use the same voice IDs as `local-say`, and `--speed` has the same
-finite **0.5–2.0** inclusive bound. Without `--output`, the directory is
-`<EPUB stem>-audiobook` beside the EPUB. The input EPUB is never modified. Output has this shape:
+Audiobooks use the same voice IDs as `local-say`. The `--speed` value must be finite and between 0.5 and 2.0, inclusive. Without `--output`, the output directory is `<EPUB stem>-audiobook` beside the EPUB. The input EPUB is never modified. The output directory contains:
 
 ```text
 My-Audiobook/
@@ -182,60 +201,34 @@ My-Audiobook/
 └── .lock
 ```
 
-- `audiobook.m4b` combines the audio with title/author metadata and named
-  chapter markers.
-- `chapter-NNNN.m4a` files are playable mono AAC chapters and the resume cache.
-- `manifest.json` records the source and extracted-text hashes, selected
-  sections, model, voice, and speed.
+- `audiobook.m4b` combines the audio with title and author metadata and named chapter markers.
+- `chapter-NNNN.m4a` files contain playable mono AAC chapters and serve as the resume cache.
+- `manifest.json` records source and extracted-text hashes, selected sections, model, voice, and speed.
 - `chapters.ffconcat` and `chapters.ffmetadata` describe the final remux.
-- `.lock` prevents two conversions from using one output directory at once.
+- `.lock` prevents concurrent conversions from using the same output directory.
 
-Chapter audio is encoded as 24 kHz mono AAC targeting 64 kbit/s. The final M4B
-copies that AAC without another lossy encode. Speech is requested in chunks of
-at most 900 characters and streamed into FFmpeg, rather than retaining an
-entire book's PCM audio in memory.
+Chapter audio uses 24 kHz mono AAC with a target bitrate of 64 kbit/s. The final M4B copies the AAC audio without another lossy encode. Speech requests contain at most 900 characters. The command streams the resulting audio into FFmpeg instead of retaining the entire book's PCM audio in memory.
 
-The numbers accepted by `--chapters` are the indices printed by
-`--list-chapters`: readable, linear EPUB spine sections in their reading order.
-They are not necessarily printed chapter numbers, TOC anchor numbers, manifest
-order, or ZIP filenames. A publisher may split one printed chapter across
-multiple spine files or place several chapters in one file. Inspect the list
-before a long conversion. Selection preserves book reading order.
+`--chapters` accepts the indices printed by `--list-chapters`: readable, linear EPUB spine sections in reading order. These indices can differ from printed chapter numbers, table of contents (TOC) anchor numbers, manifest order, or ZIP filenames. A publisher can split a printed chapter across several spine files or place several chapters in one file. The section list therefore needs inspection before a long conversion. Section selection preserves book reading order.
 
-Press Ctrl-C to stop cleanly, then rerun the **same command**. Completed M4A
-chapters are validated and reused; the interrupted chapter restarts from its
-beginning. The manifest prevents accidental mixing: changing the EPUB contents,
-section selection, voice, or speed requires a new output directory. A nonempty
-unrelated directory is not overwritten. Keep the manifest and M4A files if
-resume or later remuxing is desired.
+Ctrl-C stops conversion cleanly. Rerunning the same command validates and reuses completed M4A chapters. The interrupted chapter restarts from its beginning. The manifest prevents accidental mixing of source content and narration settings. Changes to EPUB contents, section selection, voice, or speed require a new output directory. The command does not overwrite a nonempty unrelated directory. Resume and later remuxing require the manifest and M4A files.
 
 ### EPUB limitations
 
-- Input must be a DRM-free, text-based English EPUB. DRM removal and OCR are not
-  provided. A declared non-English language is rejected.
-- Reading follows linear spine documents. Navigation, scripts, hidden content,
-  image-only sections, and duplicate/nonlinear spine entries are skipped.
-- Front matter, ordinary footnotes, and afterwords remain unless excluded with
-  `--chapters`.
-- The reader does not render external CSS or split one spine document at
-  internal TOC anchors.
-- Extracted prose is normalized for narration but is not rewritten, summarized,
-  or sent to an LLM.
-- The single speech engine serializes requests, so `local-say` may wait while an
-  audiobook chunk is being generated. There are no automatic network retries
-  or sub-chapter resume points.
+- Input must be a DRM-free, text-based English EPUB. Local TTS does not provide DRM removal or OCR. It rejects a declared non-English language.
+- Reading follows linear spine documents. The reader skips navigation, scripts, hidden content, image-only sections, and duplicate or nonlinear spine entries.
+- Front matter, ordinary footnotes, and afterwords remain unless excluded with `--chapters`.
+- The reader does not render external CSS or split a spine document at internal TOC anchors.
+- The reader normalizes extracted prose for narration. It does not rewrite, summarize, or send the prose to an LLM.
+- The speech engine serializes requests. `local-say` may therefore wait while an audiobook chunk is being generated. There are no automatic network retries or sub-chapter resume points.
 
-No copyrighted book or sample passage is included; provide content you are
-permitted to process.
+The repository includes no copyrighted book or sample passage. The user must have permission to process the input content.
 
 ## HTTP API
 
-The service binds only to `127.0.0.1:8880`, has no authentication, and disables
-HTTP access logging. Other processes running as local users may still submit
-speech. Do not expose it on a network without adding authentication and
-appropriate transport security.
+The service binds only to `127.0.0.1:8880`, requires no authentication, and disables HTTP access logging. Other processes running as local users can still submit speech requests. Network exposure requires authentication and appropriate transport security.
 
-Create a WAV with the OpenAI-style speech endpoint:
+The OpenAI-style speech endpoint returns a WAV:
 
 ```bash
 curl --fail --silent --show-error http://127.0.0.1:8880/v1/audio/speech \
@@ -245,7 +238,7 @@ curl --fail --silent --show-error http://127.0.0.1:8880/v1/audio/speech \
 pw-play reply.wav
 ```
 
-Inspect service metadata:
+The service exposes readiness, model, and voice metadata at these endpoints:
 
 ```bash
 curl --fail http://127.0.0.1:8880/health
@@ -253,29 +246,21 @@ curl --fail http://127.0.0.1:8880/v1/models
 curl --fail http://127.0.0.1:8880/v1/audio/voices
 ```
 
-For compatible clients, use base URL `http://127.0.0.1:8880/v1`, model
-`kokoro`, and format `wav`; there is no API key. This is deliberately only a
-small subset of the OpenAI audio API:
+Compatible clients use the base URL `http://127.0.0.1:8880/v1`, model `kokoro`, and format `wav`. No API key is required. The service implements a limited subset of the OpenAI audio API:
 
 - `model` must be `kokoro`.
-- `input` is required after trimming and may contain at most **10,000
-  characters**.
-- `voice` must be one of `GET /v1/audio/voices`; the default is `af_heart`.
-- `speed` must be finite and within **0.5–2.0**, inclusive.
+- `input` must be nonempty after trimming and contain at most 10,000 characters.
+- `voice` must be listed by `GET /v1/audio/voices`. The default is `af_heart`.
+- `speed` must be finite and between 0.5 and 2.0, inclusive.
 - `response_format` must be `wav`.
-- The endpoint returns one complete 24 kHz mono PCM16 WAV. It does not stream,
-  return MP3/AAC, or accept voice instructions. Audiobook AAC/M4B encoding is a
-  separate CLI feature.
-- Synthesis requests are serialized and the CLI waits up to ten minutes. For
-  lower conversational latency, send sentence-sized requests.
+- The endpoint returns one complete 24 kHz mono PCM16 WAV. It does not stream, return MP3 or AAC, or accept voice instructions. Audiobook AAC and M4B encoding is a separate CLI feature.
+- The service serializes speech generation requests. The CLI waits up to ten minutes for a response. Sentence-sized requests reduce conversational latency.
 
-The API itself neither plays nor writes audio files.
+The API does not play audio or write audio files.
 
 ## Service management
 
-The standard installation enables the user service and starts it immediately.
-It starts again at user login, not at system boot independently of a login;
-the installer does not enable lingering.
+Standard installation enables and starts the user service. The service starts again at user login. It does not start at system boot independently of a login. The installer does not enable lingering.
 
 ```bash
 systemctl --user status local-tts.service
@@ -288,52 +273,41 @@ journalctl --user -u local-tts.service -n 50 --no-pager
 journalctl --user -u local-tts.service -f
 ```
 
-Restart after changing server code or replacing model assets.
+Server code changes and model file replacements require a service restart.
 
 ## Models, checksums, and network privacy
 
-Kokoro-82M is distributed by its authors at
-[hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M). This project
-uses the full-precision ONNX model and voice data published with the
-[kokoro-onnx `model-files-v1.1`
-release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1).
-The Kokoro model repository publishes its model under Apache-2.0. The expected
-SHA-256 digests for the two downloaded assets are committed in
-`models/SHA256SUMS`.
+The model authors distribute Kokoro-82M at [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M). Local TTS uses the full-precision ONNX model and voice data from the [kokoro-onnx `model-files-v1.1` release](https://github.com/thewh1teagle/kokoro-onnx/releases/tag/model-files-v1.1). The Kokoro model repository publishes the model under Apache-2.0. `models/SHA256SUMS` contains the committed SHA-256 digests for the downloaded model and voice data files.
 
-Every installer run checks existing assets. Verified assets are reused; a
-needed download is written to a temporary file and is published only after its
-checksum matches. Setup may contact the Python package source used by uv and
-the GitHub release above. Normal server, speech, and audiobook operation makes
-no external request; EPUB text and generated audio remain on the machine.
+Each installer run verifies existing model files. The installer reuses valid files. It writes required downloads to temporary files and publishes them only after their checksums match. Setup can contact the Python package source configured for uv and the GitHub release above. Normal server, speech, and audiobook operation makes no external request. EPUB text and generated audio remain on the machine.
 
 ## Tests
 
-After installation, run the unit tests from the repository root:
+The unit tests run from the repository root after installation:
 
 ```bash
 .venv/bin/python -m unittest discover -v
 ```
 
-They use generated fixtures and do not require model files, a running service,
-or network access. The FFmpeg container test runs when FFmpeg and ffprobe are
-available and is otherwise skipped. The generated-unit parser regression runs
-when `systemd-analyze` is available; it does not install or start a service.
+The tests use generated fixtures and require no model files, running service, or network access. The FFmpeg container test runs when FFmpeg and ffprobe are available and is otherwise skipped. The generated-unit parser regression runs when `systemd-analyze` is available. It does not install or start a service.
 
-The initial Linux integration check passed all 14 tests and exercised a fresh
-source-only checkout in a path containing spaces, `%`, and a backslash. It
-installed the locked environment, downloaded and verified both assets, started
-a foreground server, generated WAV speech and a two-chapter M4B, and repeated
-`--no-service` installation with networking disabled. The user-service install
-was also exercised separately. These are verification results, not a claim of
-testing every Linux distribution or architecture.
+### Verification history
+
+The initial Linux integration check passed all 14 tests. It used a fresh source-only checkout in a path containing spaces, `%`, and a backslash. The check installed the locked environment, downloaded and verified both model files, and started a foreground server. It generated WAV speech and a two-chapter M4B. It also repeated `--no-service` installation with networking disabled. The user-service installation was tested separately. These results do not establish compatibility with every Linux distribution or architecture.
+
+The announcement addition passed the 24-test Python suite and an installed OMP tool invocation through PipeWire. An isolated D-Bus scenario tested normal playback, SIGTERM during `pw-play`, and an unavailable playback device. Normal playback, cancellation, and device failure each restored the eligible playing fixture. Initially paused and KDE Connect fixtures remained unchanged. Extension AbortSignal propagation was tested against a real helper waiting on the announcement lock. A pre-aborted invocation was also tested. Audible quality was not independently assessed.
+
+The delayed-MPRIS-state fix passed all 28 Python tests. A private D-Bus runtime scenario tested the CLI with delayed `Pause` and `Play` status publication. It also tested cancellation before the paused status appeared and a pause published after the initial observation window. Each scenario restored the playing fixture and left an already-paused fixture unchanged. These checks used isolated MPRIS fixtures rather than a live Spotify session.
 
 ## Uninstall
 
-From the repository root, first disable and remove only this project's generated
-user unit, then remove only command links that resolve to this checkout. The
-commands below intentionally leave the checkout, model assets, virtual
-environment, EPUBs, and generated audio in place:
+The following command removes the optional OMP extension link if it was installed. OMP must restart to unload the extension.
+
+```bash
+omp plugin uninstall omp-local-announce
+```
+
+The following commands run from the repository root. They disable and remove only the user unit generated for this checkout, then remove only command links that resolve to it. The checkout, model files, virtual environment, EPUBs, and generated audio remain in place.
 
 ```bash
 config_home=${XDG_CONFIG_HOME:-"$HOME/.config"}
@@ -350,7 +324,7 @@ else
   printf '%s\n' "Refusing to remove an unrecognized or unrelated unit: $unit" >&2
 fi
 
-for command in local-say local-audiobook local-tts-server; do
+for command in local-say local-audiobook local-tts-server local-announce; do
   link="$HOME/.local/bin/$command"
   if [ -L "$link" ] && [ "$(readlink -f "$link")" = "$(pwd -P)/$command" ]; then
     rm -- "$link"
@@ -358,17 +332,8 @@ for command in local-say local-audiobook local-tts-server; do
 done
 ```
 
-If installation used `--bin-dir`, replace `$HOME/.local/bin` with that same
-absolute directory. Before removing the unit, inspect it if there is any doubt
-that it was generated by this checkout; do not remove an unrelated unit with
-the same name. After uninstalling, delete the checkout or generated audiobook
-directories only if their retained data is no longer wanted.
+If installation used `--bin-dir`, that same absolute directory must replace `$HOME/.local/bin` in the removal commands. The user must verify the unit's origin before removal if its ownership is uncertain. An unrelated unit with the same name must remain in place. After uninstalling, the checkout and generated audiobook directories can be deleted if their retained data is no longer required.
 
 ## License
 
-The project's original source code is licensed under the [MIT License](LICENSE).
-Bundled/downloaded models, Python packages, and system tools retain their own
-licenses; the complete installed runtime is **not** uniformly permissive.
-Notably, [EbookLib](https://github.com/aerkalov/ebooklib) is licensed under the
-GNU AGPL. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for provenance
-and third-party license details.
+The [MIT License](LICENSE) covers the project's original source code. Bundled or downloaded models, Python packages, and system tools retain their own licenses. The complete installed runtime is not uniformly permissive. [EbookLib](https://github.com/aerkalov/ebooklib) uses the GNU AGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) records component provenance and third-party license details.
