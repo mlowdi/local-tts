@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+script=$0
+while [ -L "$script" ]; do
+    directory=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd -P)
+    target=$(readlink -- "$script")
+    case $target in
+        /*) script=$target ;;
+        *) script=$directory/$target ;;
+    esac
+done
+directory=$(CDPATH= cd -- "$(dirname -- "$script")" && pwd -P)
+exec "$directory/.venv/bin/python" -m uvicorn server:app \
+    --app-dir "$directory" --host 127.0.0.1 --port 8880 --no-access-log "$@"

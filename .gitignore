@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+models/*
+!models/SHA256SUMS
+samples/
+audiobooks/
+*-audiobook/
+*.epub
+*.wav
+*.m4a
+*.m4b
+*.mp3
+*.flac
+*.part
+.env
+.env.*

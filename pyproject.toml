@@ -1,0 +1,19 @@
+[project]
+name = "local-kokoro-tts"
+version = "1.0.0"
+description = "Offline Kokoro speech service and EPUB audiobook generation for Linux"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "kokoro-onnx==0.6.1",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.34,<1",
+    "soundfile>=0.13,<1",
+    "ebooklib==0.20",
+    "beautifulsoup4>=4.13,<5",
+]
+
+[tool.uv]
+package = false
